@@ -17,4 +17,4 @@ Left to do:
 
 Licensed WTFPL.
 
-tileset.png is public domain.
+tileset.png is https://opengameart.org/content/simple-broad-purpose-tileset
