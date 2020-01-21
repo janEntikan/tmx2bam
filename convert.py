@@ -19,7 +19,7 @@ class Converter():
         self.depth = 0
         # generators
         self.cardmaker = CardMaker("image")
-        self.cardmaker.set_frame(0,1,0,1)
+        self.cardmaker.set_frame(0, 1, -1, 0)
         self.linesegs = LineSegs()
         self.textnode = TextNode("text")
         # storage
@@ -31,6 +31,12 @@ class Converter():
         self.xscale = int(self.tmx.get("tilewidth"))
         self.yscale = int(self.tmx.get("tileheight"))
         self.load_group(self.tmx)
+
+        # debug center
+        sq = NodePath(self.build_rectangle(1, 1))
+        sq.reparent_to(self.root_node)
+        sq.set_pos(-0.5, -0.5, 0)
+
         self.export_bam(output_file)
 
     def attributes_to_tags(self, node, element):
@@ -172,7 +178,7 @@ class Converter():
             tile_group.reparent_to(layer_node)
         # dynamic tiles each do their own thing, so we leave them alone
         dynamic_tiles.reparent_to(layer_node)
-        layer_node.set_pos(0, 0, self.depth)
+        layer_node.set_z(self.depth)
         layer_node.reparent_to(self.root_node)
 
     def load_objectgroup(self, objectgroup):
@@ -210,7 +216,21 @@ class Converter():
         layer_node.reparent_to(self.root_node)
 
     def load_imagelayer(self, imagelayer):
-        pass
+        image = imagelayer[0]
+        right = int(image.get("width"))/self.xscale
+        down = int(image.get("height"))/self.yscale
+        self.cardmaker.set_frame(0, right, -down, 0)
+        node = NodePath(self.cardmaker.generate())
+        self.cardmaker.set_frame(0, 1, -1, 0)
+        texture = Texture()
+        texture.read(os.path.join(self.dir, image.get("source")))
+        node.set_texture(texture)
+        node.set_transparency(True)
+        node.reparent_to(self.root_node)
+        x = float(imagelayer.get("offsetx"))/self.xscale
+        y = float(imagelayer.get("offsety"))/self.yscale
+        node.set_pos((x, y, self.depth))
+        node.set_p(90)
 
     def load_group(self, group):
         for layer in group:

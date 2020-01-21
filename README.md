@@ -14,9 +14,9 @@ Currently supports:
 * Multiple layers and Groups
 * Animated tiles
 * Object layer/Objects (point, poly, rectangle, text, image)
+* Background images
 
 Left to do:
-* Background image
 * Flatten animated sprites
 * Infinite maps (chunks)
 * Hexagonal and Isometric tiles
@@ -32,7 +32,7 @@ Mind:
 * Currently The map is facing DOWN?
 * Animated sprites can only have one steady framerate that you can set on the first frame in Tiled.
 * Currently image resolution has to be power of two.
-* Tiles are merged into a single block of geometry as much as possible. Give tiles custom properties or animations to avoid this from happening.
+* Tiles are merged into a single block of geometry as much as possible. Give tiles custom properties to avoid this from happening.
 * The ellipse and point objects are not drawn, they're empty nodepaths.
 * It might be fun if some cards where cubes instead.
 * I'm not a programmer but I play one on TV.
