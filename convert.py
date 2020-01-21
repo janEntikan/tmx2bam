@@ -30,6 +30,7 @@ class Converter():
         self.tmx = ET.parse(input_file).getroot()
         self.xscale = int(self.tmx.get("tilewidth"))
         self.yscale = int(self.tmx.get("tileheight"))
+
         self.load_group(self.tmx)
 
         self.export_bam(output_file)
@@ -71,18 +72,20 @@ class Converter():
         card_node = NodePath(card)
         card_node.set_texture(tsx.get("texture"))
         card_node.set_transparency(True)
-        # calculate UVs
-        # FIXME, it's not nearly precise enough!
-        w = self.xscale/int(tsx[0].get("width"))
-        h = self.yscale/int(tsx[0].get("height"))
-        columns = int(tsx.get("columns"))
-        rows = int(tsx.get("tilecount"))//columns
-        tile_x = round(id%columns)
-        tile_y = round(id/rows)
+        stage = card_node.find_all_texture_stages()[0]
+        # size of sheet in tiles
+        columns = int(tsx.get("columns")) # = 80
+        rows = int(tsx.get("rows")) # = 80
+        # size of a single tile in UV (produces imprecise floats)
+        w = float(tsx.get("uv_xscale")) # = 0.0125
+        h = float(tsx.get("uv_yscale")) # = 0.0125
+        # pos of tile in sheet
+        tile_x = int(id%columns)
+        tile_y = int(id/rows)
+        # pos of a single tile in UV
         u = (tile_x*w)
         v = 1-((tile_y*h)+h)
         # set UVs
-        stage = card_node.find_all_texture_stages()[0]
         card_node.set_tex_scale(stage, w, h)
         card_node.set_tex_offset(stage, (u, v))
         return card_node
@@ -287,11 +290,23 @@ class Converter():
         img_filename = tsx[0].get("source")
         texture = Texture()
         texture.read(os.path.join(self.dir, img_filename))
+        # texture.setWrapU(Texture.WM_clamp)
+        # texture.setWrapV(Texture.WM_clamp)
         texture.setMagfilter(SamplerState.FT_nearest)
         texture.setMinfilter(SamplerState.FT_nearest)
         tsx.set("texture", texture)
+        # Calculate tile size in uv's
+        columns = int(tsx.get("columns"))
+        rows = int(tsx.get("tilecount"))//columns
+        uv_xscale = 1/columns
+        uv_yscale = 1/rows
+        tsx.set("rows", str(rows))
+        tsx.set("uv_xscale", str(uv_xscale))
+        tsx.set("uv_yscale", str(uv_yscale))
+
         layer.set("tsx", tsx)
         self.tilesheets.append(layer)
+
 
     def export_bam(self, filename):
         print("Exporting as {}".format(filename))
