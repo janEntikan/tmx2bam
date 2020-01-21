@@ -3,11 +3,9 @@ CLI tool for converting Tiled TMX files to Panda3D BAM files.
 Usage:
 ```
 python convert.py path/to/tmx/file.tmx path/to/bam/file.bam
-
-load the bam with panda3d like you would normally.
-find() important tiles by their tags and make them move about and all that.
-Orthographic camera recommended!
 ```
+load the bam with panda3d like you would normally. find() important tiles by their tags and make them move about and all that. Orthographic camera recommended!
+
 
 Currently supports:
 * TMX file with CSV data (default)
@@ -36,6 +34,7 @@ Mind:
 * Currently image resolution has to be power of two.
 * Tiles are merged into a single block of geometry as much as possible. Give tiles custom properties or animations to avoid this from happening.
 * It might be fun if some cards where cubes instead.
+* I'm not a programmer but I play one on TV.
 
 Licensed WTFPL.
 
