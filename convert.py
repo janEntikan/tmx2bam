@@ -69,8 +69,7 @@ class Converter():
         node.attach_new_node(sequence)
         return node
 
-    def load_tile(self, tileset, id):
-        tsx = tileset.get("tsx")
+    def load_tile(self, tsx, id):
         is_special = False
         for element in tsx:
             if element.tag == "tile":
@@ -113,7 +112,7 @@ class Converter():
                     if global_id in self.tiles: # if card already stored
                         card = self.tiles[global_id] # use that one
                     else: # else build and store it
-                        card = self.load_tile(tileset, tile_id)
+                        card = self.load_tile(tileset.get("tsx"), tile_id)
                         self.tiles[global_id] = card
                     # make a copy
                     tile = NodePath("tile")
