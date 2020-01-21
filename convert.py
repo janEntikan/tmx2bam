@@ -14,7 +14,12 @@ from panda3d.core import SequenceNode
 class Converter():
     def __init__(self, input_file, output_file):
         self.cardmaker = CardMaker("image")
+        self.cardmaker.set_frame(0,1,0,1)
         self.root_node = NodePath("tmx_root")
+
+
+        self.dir = os.path.dirname(input_file) + "/"
+        print(self.dir)
         self.depth = 0
 
         self.tilesheets = []    # Every tilesheet loaded.
@@ -24,49 +29,28 @@ class Converter():
         self.load_group(self.tmx)
         self.export_bam(output_file)
 
-    def get_tileset(self, id):
-        for tilesheet in self.tilesheets:
-            if int(tilesheet.get("firstgid")) > id:
-                break
-            else:
-                last = tilesheet
-        id_in_sheet = id - int(last.get("firstgid"))
-        return last, id_in_sheet,
-
-    def load_tsx(self, layer):
-        tsx_filename = layer.get("source")
-        tsx = ET.parse(tsx_filename).getroot()
-        # Load texture and store in tsx as well.
-        img_filename = tsx[0].get("source")
-        texture = Texture()
-        texture.read(img_filename)
-        texture.setMagfilter(SamplerState.FT_nearest)
-        texture.setMinfilter(SamplerState.FT_nearest)
-        tsx.set("texture", texture)
-        layer.set("tsx", tsx)
-        self.tilesheets.append(layer)
+    def attributes_to_tags(self, node, element):
+        for key in element.keys():
+            node.set_tag(key, element.get(key))
 
     def build_card(self, tsx, id):
         card = self.cardmaker.generate()
         card_node = NodePath(card)
         card_node.set_p(90)
         card_node.set_texture(tsx.get("texture"))
+        card_node.set_transparency(True)
         # calculate UVs
         w = int(tsx.get("tilewidth"))/int(tsx[0].get("width"))
         h = int(tsx.get("tileheight"))/int(tsx[0].get("height"))
         rows = 1/w
         collumns = 1/h
         u = (id%rows)*w
-        v = 1-(((id//collumns)*h)+h)
+        v = 1-(((id/collumns)*h)+h)
         # set UVs
         stage = card_node.find_all_texture_stages()[0]
         card_node.set_tex_scale(stage, w, h)
         card_node.set_tex_offset(stage, (u, v))
         return card_node
-
-    def attributes_to_tags(self, node, element):
-        for key in element.keys():
-            node.set_tag(key, element.get(key))
 
     def sequence_tile(self, tsx, tile):
         node = NodePath("animated tile")
@@ -87,19 +71,22 @@ class Converter():
 
     def load_tile(self, tileset, id):
         tsx = tileset.get("tsx")
-        found = False
-        for tile in tsx:
-            if tile.tag == "tile":
-                if int(tile.get("id")) == id:
-                    found = True
-                    if len(tile) > 0:
-                        node = self.sequence_tile(tsx, tile)
+        is_special = False
+        for element in tsx:
+            if element.tag == "tile":
+                if int(element.get("id")) == id:
+                    if len(element) > 0:
+                        # FIXME: if there's something in the element
+                        # that means there's an animation?
+                        node = self.sequence_tile(tsx, element)
                     else:
                         node = self.build_card(tsx, id)
                         node.set_tag("type", "dynamic")
-                    self.attributes_to_tags(node, tile)
+                    self.attributes_to_tags(node, element)
+                    is_special = True
                     break
-        if not found:
+
+        if not is_special:
             node = self.build_card(tsx, id)
         return node
 
@@ -172,27 +159,6 @@ class Converter():
             # TODO: set object transform, parent to layer_node.
         layer_node.reparent_to(self.root_node)
 
-    def load_imagelayer(self, layer):
-        img_filename = layer[0].get("source")
-        texture = Texture()
-        texture.read(img_filename)
-        layer.set("texture", texture)
-
-        card = self.cardmaker.generate()
-        card_node = NodePath(card)
-        card_node.set_texture(texture)
-        card_node.set_transparency(True)
-
-        width = int(layer[0].get("width"))
-        height = int(layer[0].get("height"))
-        card_node.set_scale(width, height, 1)
-
-        x = int(layer.get("offsetx"))
-        y = int(layer.get("offsety"))
-        card_node.set_pos(x, y, self.depth)
-
-        card_node.reparent_to(self.root_node)
-
     def load_group(self, group):
         for layer in group:
             if layer.tag == "tileset":
@@ -201,11 +167,33 @@ class Converter():
                 self.load_layer(layer)
             elif layer.tag == "objectgroup":
                 self.load_objectgroup(layer)
-            elif layer.tag == "imagelayer":
-                self.load_imagelayer(layer)
+            #elif layer.tag == "imagelayer":
+            #    self.load_imagelayer(layer)
             elif layer.tag == "group":
                 self.load_group(layer)
             self.depth -= 1
+
+    def get_tileset(self, id):
+        for tilesheet in self.tilesheets:
+            if int(tilesheet.get("firstgid")) > id:
+                break
+            else:
+                last = tilesheet
+        id_in_sheet = id - int(last.get("firstgid"))
+        return last, id_in_sheet,
+
+    def load_tsx(self, layer):
+        tsx_filename = layer.get("source")
+        tsx = ET.parse(self.dir + tsx_filename).getroot()
+        # Load texture and store in tsx as well.
+        img_filename = tsx[0].get("source")
+        texture = Texture()
+        texture.read(self.dir + img_filename)
+        texture.setMagfilter(SamplerState.FT_nearest)
+        texture.setMinfilter(SamplerState.FT_nearest)
+        tsx.set("texture", texture)
+        layer.set("tsx", tsx)
+        self.tilesheets.append(layer)
 
     def export_bam(self, filename):
         print("Exporting as {}".format(filename))
