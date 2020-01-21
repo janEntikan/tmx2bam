@@ -73,12 +73,14 @@ class Converter():
         card_node.set_transparency(True)
         # calculate UVs
         # FIXME, it's not nearly precise enough!
-        w = int(tsx.get("tilewidth"))/int(tsx[0].get("width"))
-        h = int(tsx.get("tileheight"))/int(tsx[0].get("height"))
-        rows = 1/w
-        collumns = 1/h
-        u = (id%rows)*w
-        v = 1-(((id/collumns)*h)+h)
+        w = self.xscale/int(tsx[0].get("width"))
+        h = self.yscale/int(tsx[0].get("height"))
+        columns = int(tsx.get("columns"))
+        rows = int(tsx.get("tilecount"))//columns
+        tile_x = round(id%columns)
+        tile_y = round(id/rows)
+        u = (tile_x*w)
+        v = 1-((tile_y*h)+h)
         # set UVs
         stage = card_node.find_all_texture_stages()[0]
         card_node.set_tex_scale(stage, w, h)
@@ -89,12 +91,10 @@ class Converter():
         node = NodePath("animated tile")
         sequence = SequenceNode("animated tile")
         duration = int(tile[0][0].get("duration"))
-
         if duration > 0:
             sequence.set_frame_rate(1000/duration)
         else:
             sequence.set_frame_rate = 0
-
         for frame in tile[0]:
             tileid = int(frame.get("tileid"))
             tile_node = self.build_tilecard(tsx, tileid)
@@ -118,14 +118,15 @@ class Converter():
                         # if it contains an element, it's always an animation
                         if len(element) > 0:
                             node = self.animated_tile(tsx, element)
+                            # if it has properties other then ID, don't flatten
+                            if len(element.keys()) > 1:
+                                node.set_tag("_flatten", "dynamic")
+                            else:
+                                node.set_tag("_flatten", "group")
                         else:
+                            node.set_tag("_flatten", "dynamic")
                             node = self.build_tilecard(tsx, set_id)
                         self.attributes_to_tags(node, element)
-                        # if it has properties other then ID, don't flatten
-                        if len(element.keys()) > 1:
-                            node.set_tag("_flatten", "dynamic")
-                        else:
-                            node.set_tag("_flatten", "group")
                         is_special = True
                         break
             if not is_special:
@@ -171,7 +172,7 @@ class Converter():
         # flatten all static cards,
         static_tiles.flattenStrong()
         static_tiles.reparent_to(layer_node)
-        # flatten each tile-group seperately
+        # flatten each tile-group seperately (if animated)
         for group in tile_groups:
             tile_groups[group] = self.flatten_animated_tiles(tile_groups[group])
             tile_groups[group].reparent_to(layer_node)
