@@ -9,23 +9,27 @@ from panda3d.core import Texture
 from panda3d.core import CardMaker
 from panda3d.core import SamplerState
 from panda3d.core import SequenceNode
+from panda3d.core import LineSegs
+from panda3d.core import TextNode
 
 
 class Converter():
     def __init__(self, input_file, output_file):
+        self.dir = os.path.dirname(input_file)
+        self.depth = 0
+        # generators
         self.cardmaker = CardMaker("image")
         self.cardmaker.set_frame(0,1,0,1)
+        self.linesegs = LineSegs()
+        self.textnode = TextNode("text")
+        # storage
+        self.tilesheets = []    # Every tsx file loaded.
+        self.tiles = {}         # Every tile-card generated.
         self.root_node = NodePath("tmx_root")
 
-
-        self.dir = os.path.dirname(input_file) + "/"
-        print(self.dir)
-        self.depth = 0
-
-        self.tilesheets = []    # Every tilesheet loaded.
-        self.tiles = {}         # Every tile-card generated.
-
         self.tmx = ET.parse(input_file).getroot()
+        self.xscale = int(self.tmx.get("tilewidth"))
+        self.yscale = int(self.tmx.get("tileheight"))
         self.load_group(self.tmx)
         self.export_bam(output_file)
 
@@ -33,13 +37,38 @@ class Converter():
         for key in element.keys():
             node.set_tag(key, element.get(key))
 
+    def build_text(self, object):
+        self.textnode.set_text(object[0].text)
+        # TODO: set color
+        # TODO: set wrap
+        return self.textnode.generate()
+
+    def build_polygon(self, object):
+        points = object[0].get("points").split(" ")
+        points = [tuple(map(float, i.split(","))) for i in points]
+        self.linesegs.reset()
+        self.linesegs.move_to(points[0][0]/self.xscale, points[0][1]/self.yscale, 0)
+        for point in points:
+            self.linesegs.draw_to(point[0]/self.xscale, point[1]/self.yscale, 0)
+        self.linesegs.draw_to(points[0][0]/self.xscale, points[0][1]/self.yscale, 0)
+        return self.linesegs.create()
+
+    def build_rectangle(self, w, h):
+        self.linesegs.reset()
+        self.linesegs.move_to(0, 0, 0)
+        self.linesegs.draw_to(w, 0, 0)
+        self.linesegs.draw_to(w, h, 0)
+        self.linesegs.draw_to(0, h, 0)
+        self.linesegs.draw_to(0, 0, 0)
+        return self.linesegs.create()
+
     def build_card(self, tsx, id):
         card = self.cardmaker.generate()
         card_node = NodePath(card)
-        card_node.set_p(90)
         card_node.set_texture(tsx.get("texture"))
         card_node.set_transparency(True)
         # calculate UVs
+        # FIXME, it's not nearly precise enough!
         w = int(tsx.get("tilewidth"))/int(tsx[0].get("width"))
         h = int(tsx.get("tileheight"))/int(tsx[0].get("height"))
         rows = 1/w
@@ -52,7 +81,7 @@ class Converter():
         card_node.set_tex_offset(stage, (u, v))
         return card_node
 
-    def sequence_tile(self, tsx, tile):
+    def animated_tile(self, tsx, tile):
         node = NodePath("animated tile")
         sequence = SequenceNode("animated tile")
         duration = int(tile[0][0].get("duration"))
@@ -64,29 +93,38 @@ class Converter():
             tileid = int(frame.get("tileid"))
             tile_node = self.build_card(tsx, tileid)
             sequence.add_child(tile_node.node())
-        sequence.set_frame_rate(1000/duration)
+        if duration == 0:
+            sequence.set_frame_rate = 0
+        else:
+            sequence.set_frame_rate(1000/duration)
         sequence.loop(True)
         node.attach_new_node(sequence)
         return node
 
-    def load_tile(self, tsx, id):
-        is_special = False
-        for element in tsx:
-            if element.tag == "tile":
-                if int(element.get("id")) == id:
-                    if len(element) > 0:
-                        # FIXME: if there's something in the element
-                        # that means there's an animation?
-                        node = self.sequence_tile(tsx, element)
-                    else:
-                        node = self.build_card(tsx, id)
-                        node.set_tag("type", "dynamic")
-                    self.attributes_to_tags(node, element)
-                    is_special = True
-                    break
-
-        if not is_special:
-            node = self.build_card(tsx, id)
+    def get_tile(self, map_id):
+        # map_id is as it is in map data
+        # set_id is as it is in tileset
+        tileset, set_id = self.get_tileset(map_id)
+        tsx = tileset.get("tsx")
+        if map_id in self.tiles: # if card is already stored
+            node = self.tiles[map_id] # use that one
+        else: # else build and store it
+            is_special = False
+            for element in tsx:
+                if element.tag == "tile":
+                    if int(element.get("id")) == set_id:
+                        if len(element) > 0:
+                            node = self.animated_tile(tsx, element)
+                        else:
+                            node = self.build_card(tsx, set_id)
+                            node.set_tag("type", "dynamic")
+                        self.attributes_to_tags(node, element)
+                        is_special = True
+                        break
+            if not is_special:
+                node = self.build_card(tsx, set_id)
+            self.tiles[map_id] = node
+        node.set_p(90)
         return node
 
     def load_layer(self, layer):
@@ -99,32 +137,23 @@ class Converter():
         data = layer[0].text
         data = data.replace('\n', '')
         data = data.split(",")
-        width = int(layer.get("width"))
-        height = int(layer.get("height"))
-        for y in range(height):
-            for x in range(width):
-                # get tile int in data
-                global_id = int(data[(y*width) + (x%width)])
-                if global_id > 0: # 0 is tileless
-
-                    # get card from global_id
-                    tileset, tile_id = self.get_tileset(global_id)
-                    if global_id in self.tiles: # if card already stored
-                        card = self.tiles[global_id] # use that one
-                    else: # else build and store it
-                        card = self.load_tile(tileset.get("tsx"), tile_id)
-                        self.tiles[global_id] = card
+        collumns = int(layer.get("width"))
+        rows = int(layer.get("height"))
+        for y in range(rows):
+            for x in range(collumns):
+                id = int(data[(y*collumns) + (x%collumns)])
+                if id > 0:
                     # make a copy
                     tile = NodePath("tile")
+                    card = self.get_tile(id)
                     card.copy_to(tile)
-
                     # Reparent to nodes for flattening.
                     if card.get_tag("type") == "group":
-                        if global_id in tile_groups:
-                            group_node = tile_groups[global_id]
+                        if id in tile_groups:
+                            group_node = tile_groups[id]
                         else:
                             group_node = NodePath("tile group")
-                            tile_groups[global_id] = group_node
+                            tile_groups[id] = group_node
                         tile.reparent_to(group_node)
                     elif card.get_tag("type") == "dynamic":
                         print("a dynamic tile found")
@@ -146,17 +175,42 @@ class Converter():
         layer_node.set_pos(0, 0, self.depth)
         layer_node.reparent_to(self.root_node)
 
-    def load_objectgroup(self, layer):
-        layer_node = NodePath(layer.get("name"))
-        # TODO: for object in group:
-            # TODO: if point: Empty PandaNode.
-            # TODO: elif polygon: Linesegs.
-            # TODO: elif text: TextNode.
-            # TODO: elif ellipse: euhh...
-            # TODO: else it's a rectangle.
-            # TODO: set attributes as tags.
-            # TODO: set object transform, parent to layer_node.
+    def load_objectgroup(self, objectgroup):
+        layer_node = NodePath(objectgroup.get("name"))
+        for object in objectgroup:
+            name = object.get("name")
+            if not name: name = "object"
+            node = NodePath(name)
+            if len(object) > 0:
+                # Has a type, it's a polygon, text, point or ellipse
+                # Points and ellipses stay empty for now.
+                kind = object[0].tag
+                if kind == "polygon":
+                    node.attach_new_node(self.build_polygon(object))
+                elif kind == "text":
+                    node.attach_new_node(self.build_text(object))
+                    node.set_p(90)
+                self.attributes_to_tags(node, object[0])
+            else: # Doesn't have a type, it's either an image or a rectangle
+                node = NodePath(name)
+                w = float(object.get("width"))/self.xscale
+                h = float(object.get("height"))/self.yscale
+                if object.get("gid"): # Has a gid, it's an image
+                    self.get_tile(int(object.get("gid"))).copy_to(node)
+                    node.set_scale(w, h, 1)
+                else: # It's a rectangle
+                    node.attach_new_node(self.build_rectangle(w, h))
+
+            x = float(object.get("x"))/self.xscale
+            y = float(object.get("y"))/self.yscale
+            node.set_pos(x, y, 0)
+            self.attributes_to_tags(node, object)
+            node.reparent_to(layer_node)
+        layer_node.set_z(self.depth)
         layer_node.reparent_to(self.root_node)
+
+    def load_imagelayer(self, imagelayer):
+        pass
 
     def load_group(self, group):
         for layer in group:
@@ -166,8 +220,8 @@ class Converter():
                 self.load_layer(layer)
             elif layer.tag == "objectgroup":
                 self.load_objectgroup(layer)
-            #elif layer.tag == "imagelayer":
-            #    self.load_imagelayer(layer)
+            elif layer.tag == "imagelayer":
+                self.load_imagelayer(layer)
             elif layer.tag == "group":
                 self.load_group(layer)
             self.depth -= 1
@@ -183,11 +237,11 @@ class Converter():
 
     def load_tsx(self, layer):
         tsx_filename = layer.get("source")
-        tsx = ET.parse(self.dir + tsx_filename).getroot()
+        tsx = ET.parse(os.path.join(self.dir, tsx_filename)).getroot()
         # Load texture and store in tsx as well.
         img_filename = tsx[0].get("source")
         texture = Texture()
-        texture.read(self.dir + img_filename)
+        texture.read(os.path.join(self.dir, img_filename))
         texture.setMagfilter(SamplerState.FT_nearest)
         texture.setMinfilter(SamplerState.FT_nearest)
         tsx.set("texture", texture)
