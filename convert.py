@@ -32,11 +32,6 @@ class Converter():
         self.yscale = int(self.tmx.get("tileheight"))
         self.load_group(self.tmx)
 
-        # debug center
-        sq = NodePath(self.build_rectangle(1, 1))
-        sq.reparent_to(self.root_node)
-        sq.set_pos(-0.5, -0.5, 0)
-
         self.export_bam(output_file)
 
     def attributes_to_tags(self, node, element):
@@ -50,13 +45,16 @@ class Converter():
         return self.textnode.generate()
 
     def build_polygon(self, object):
+        self.linesegs.reset()
         points = object[0].get("points").split(" ")
         points = [tuple(map(float, i.split(","))) for i in points]
-        self.linesegs.reset()
-        self.linesegs.move_to(points[0][0]/self.xscale, points[0][1]/self.yscale, 0)
+        startx = points[0][0]/self.xscale
+        starty = points[0][1]/self.yscale
+        self.linesegs.move_to(startx, starty, 0)
         for point in points:
-            self.linesegs.draw_to(point[0]/self.xscale, point[1]/self.yscale, 0)
-        self.linesegs.draw_to(points[0][0]/self.xscale, points[0][1]/self.yscale, 0)
+            x, y = point[0]/self.xscale, point[1]/self.yscale
+            self.linesegs.draw_to(x, y, 0)
+        self.linesegs.draw_to(startx, starty, 0)
         return self.linesegs.create()
 
     def build_rectangle(self, w, h):
@@ -68,7 +66,7 @@ class Converter():
         self.linesegs.draw_to(0, 0, 0)
         return self.linesegs.create()
 
-    def build_card(self, tsx, id):
+    def build_tilecard(self, tsx, id):
         card = self.cardmaker.generate()
         card_node = NodePath(card)
         card_node.set_texture(tsx.get("texture"))
@@ -91,18 +89,16 @@ class Converter():
         node = NodePath("animated tile")
         sequence = SequenceNode("animated tile")
         duration = int(tile[0][0].get("duration"))
+
         if duration > 0:
-            node.set_tag("type", "group")
+            sequence.set_frame_rate(1000/duration)
         else:
-            node.set_tag("type", "dynamic")
+            sequence.set_frame_rate = 0
+
         for frame in tile[0]:
             tileid = int(frame.get("tileid"))
-            tile_node = self.build_card(tsx, tileid)
+            tile_node = self.build_tilecard(tsx, tileid)
             sequence.add_child(tile_node.node())
-        if duration == 0:
-            sequence.set_frame_rate = 0
-        else:
-            sequence.set_frame_rate(1000/duration)
         sequence.loop(True)
         node.attach_new_node(sequence)
         return node
@@ -119,16 +115,21 @@ class Converter():
             for element in tsx:
                 if element.tag == "tile":
                     if int(element.get("id")) == set_id:
+                        # if it contains an element, it's always an animation
                         if len(element) > 0:
                             node = self.animated_tile(tsx, element)
                         else:
-                            node = self.build_card(tsx, set_id)
-                            node.set_tag("type", "dynamic")
+                            node = self.build_tilecard(tsx, set_id)
                         self.attributes_to_tags(node, element)
+                        # if it has properties other then ID, don't flatten
+                        if len(element.keys()) > 1:
+                            node.set_tag("_flatten", "dynamic")
+                        else:
+                            node.set_tag("_flatten", "group")
                         is_special = True
                         break
             if not is_special:
-                node = self.build_card(tsx, set_id)
+                node = self.build_tilecard(tsx, set_id)
             self.tiles[map_id] = node
         node.set_p(90)
         return node
@@ -154,15 +155,14 @@ class Converter():
                     card = self.get_tile(id)
                     card.copy_to(tile)
                     # Reparent to nodes for flattening.
-                    if card.get_tag("type") == "group":
+                    if card.get_tag("_flatten") == "group":
                         if id in tile_groups:
                             group_node = tile_groups[id]
                         else:
                             group_node = NodePath("tile group")
                             tile_groups[id] = group_node
                         tile.reparent_to(group_node)
-                    elif card.get_tag("type") == "dynamic":
-                        print("a dynamic tile found")
+                    elif card.get_tag("_flatten") == "dynamic":
                         tile.reparent_to(dynamic_tiles)
                     else: # it's static
                         tile.reparent_to(static_tiles)
@@ -173,13 +173,34 @@ class Converter():
         static_tiles.reparent_to(layer_node)
         # flatten each tile-group seperately
         for group in tile_groups:
-            tile_group = tile_groups[group]
-            tile_group.flattenStrong()
-            tile_group.reparent_to(layer_node)
+            tile_groups[group] = self.flatten_animated_tiles(tile_groups[group])
+            tile_groups[group].reparent_to(layer_node)
         # dynamic tiles each do their own thing, so we leave them alone
-        dynamic_tiles.reparent_to(layer_node)
+        if dynamic_tiles.get_num_children() > 0:
+            dynamic_tiles.reparent_to(layer_node)
         layer_node.set_z(self.depth)
         layer_node.reparent_to(self.root_node)
+
+    def flatten_animated_tiles(self, group_node):
+        # FIXME: hard to read: get_child() everywhere
+        tiles =  group_node.get_children()
+        flattened_sequence = SequenceNode(tiles[0].name)
+        for a, animation in enumerate(tiles[0].node().get_children()):
+            for f, frame in enumerate(animation.get_child(0).get_children()):
+                combined_frame = NodePath("frame " + str(f))
+                for tile in tiles:
+                    new_np = NodePath("frame")
+                    new_np.set_pos(tile.get_pos())
+                    new_np.set_p(90)
+                    animation = tile.node().get_child(a).get_child(0)
+                    new_np.attach_new_node(animation.get_child(f))
+                    new_np.reparent_to(combined_frame)
+                combined_frame.flattenStrong()
+                flattened_sequence.add_child(combined_frame.node())
+        framerate = animation.get_frame_rate()
+        flattened_sequence.set_frame_rate(framerate)
+        flattened_sequence.loop(True)
+        return NodePath(flattened_sequence)
 
     def load_objectgroup(self, objectgroup):
         layer_node = NodePath(objectgroup.get("name"))
@@ -216,6 +237,7 @@ class Converter():
         layer_node.reparent_to(self.root_node)
 
     def load_imagelayer(self, imagelayer):
+        # FIXME: A lot of this stuff is repeated in build_tilcard
         image = imagelayer[0]
         right = int(image.get("width"))/self.xscale
         down = int(image.get("height"))/self.yscale
@@ -224,6 +246,8 @@ class Converter():
         self.cardmaker.set_frame(0, 1, -1, 0)
         texture = Texture()
         texture.read(os.path.join(self.dir, image.get("source")))
+        texture.setMagfilter(SamplerState.FT_nearest)
+        texture.setMinfilter(SamplerState.FT_nearest)
         node.set_texture(texture)
         node.set_transparency(True)
         node.reparent_to(self.root_node)

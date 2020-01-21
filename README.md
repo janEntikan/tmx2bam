@@ -4,8 +4,7 @@ Usage:
 ```
 python convert.py path/to/tmx/file.tmx path/to/bam/file.bam
 ```
-load the bam with panda3d like you would normally. find() important tiles by their tags and make them move about and all that. Orthographic camera recommended!
-
+load the bam with panda3d like you would normally. find() important tiles by their properties/tags and make them move about and all that. Orthographic camera recommended!
 
 Currently supports:
 * TMX file with CSV data (default)
@@ -15,27 +14,28 @@ Currently supports:
 * Animated tiles
 * Object layer/Objects (point, poly, rectangle, text, image)
 * Background images
+* Merge animated sprites
 
 Left to do:
-* Flatten animated sprites
+* Fix wonky UV calculation
 * Infinite maps (chunks)
 * Hexagonal and Isometric tiles
 * Tile render order
 * Tilesheet image collection
 * Embedded tilesheet in tmx
 * Embed texture in bam
+* Tiled features I'm not aware of
 * Error handling
-* Weird UV micro-offset
 * A better readme
 
 Mind:
-* Currently The map is facing DOWN?
+* The map is facing DOWN the Z
 * Animated sprites can only have one steady framerate that you can set on the first frame in Tiled.
-* Currently image resolution has to be power of two.
-* Tiles are merged into a single block of geometry as much as possible. Give tiles custom properties to avoid this from happening.
+* Currently the image resolutions have to be power of two.
+* Tiles are merged into a single block of geometry as much as possible. Give tiles properties other then their ID to avoid this from happening.
 * The ellipse and point objects are not drawn, they're empty nodepaths.
 * It might be fun if some cards where cubes instead.
-* I'm not a programmer but I play one on TV.
+* I'm not a programmer but I play one on TV. Your mileage may vary.
 
 Licensed WTFPL.
 
