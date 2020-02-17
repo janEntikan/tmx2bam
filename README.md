@@ -16,7 +16,7 @@ tmx_map.node.reparent_to(render)
 base.run()
 ```
 
-load the bam with panda3d like you would normally. find() important tiles by their properties/tags and make them move about and all that. Orthographic camera recommended!
+find() important tiles by their properties/tags and make them move about and all that. Orthographic camera recommended!
 
 Currently supports:
 * TMX file with CSV data (default)
