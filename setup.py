@@ -18,7 +18,7 @@ setuptools.setup(
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication"
+        "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
         "Operating System :: OS Independent",
     ],
     entry_points={
