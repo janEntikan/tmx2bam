@@ -17,14 +17,14 @@ class Tmx2Bam():
     def __init__(self, input_file, output_file=None):
         self.dir = os.path.dirname(input_file)
         self.depth = 0
-        # generators
+
         self.cardmaker = CardMaker("image")
         self.cardmaker.set_frame(0, 1, -1, 0)
         self.linesegs = LineSegs()
         self.textnode = TextNode("text")
-        # storage
+
         self.tilesheets = []    # Every tsx file loaded.
-        self.tiles = {}         # Every tile-card generated.
+        self.tiles = {}         # Every unique tile/card.
         self.node = NodePath("tmx_root")
 
         self.tmx = ET.parse(input_file).getroot()
@@ -76,10 +76,10 @@ class Tmx2Bam():
         # size of sheet in tiles
         columns = int(tsx.get("columns")) # = 80
         rows = int(tsx.get("rows")) # = 80
-        # size of a single tile in UV (produces imprecise floats)
-        w = float(tsx.get("uv_xscale")) # = 0.0125
-        h = float(tsx.get("uv_yscale")) # = 0.0125
-        # pos of tile in sheet
+        # size of a single tile in UV
+        w = float(tsx.get("uv_xscale"))
+        h = float(tsx.get("uv_yscale"))
+        # pos of tile in sheet in pixels
         tile_x = int(id%columns)
         tile_y = int(id/rows)
         # pos of a single tile in UV
@@ -107,8 +107,6 @@ class Tmx2Bam():
         return node
 
     def get_tile(self, map_id):
-        # map_id is as it is in map data
-        # set_id is as it is in tileset
         tileset, set_id = self.get_tileset(map_id)
         tsx = tileset.get("tsx")
         if map_id in self.tiles: # if card is already stored
@@ -140,9 +138,9 @@ class Tmx2Bam():
 
     def load_layer(self, layer):
         layer_node = NodePath(layer.get("name"))
-        static_tiles = NodePath("static")   # doesn't change (f.e. walls)
-        dynamic_tiles = NodePath("unique")  # changes individually (f.e. doors)
-        tile_groups = {}                    # changes in groups (f.e. water)
+        static_tiles = NodePath("static")   # Static tiles without properties (flatten)
+        dynamic_tiles = NodePath("unique")  # Any tile with a property (don't flatten)
+        tile_groups = {}                    # Animated tiles without properties (flatten)
 
         # build all tiles in data as a grid of cards
         data = layer[0].text
@@ -187,6 +185,8 @@ class Tmx2Bam():
 
     def flatten_animated_tiles(self, group_node):
         # FIXME: hard to read: get_child() everywhere
+        # Makes a new node for each frame taking all its tiles
+        # flatten the s*** out of the node and add to a new SequenceNode.
         tiles =  group_node.get_children()
         flattened_sequence = SequenceNode(tiles[0].name)
         for a, animation in enumerate(tiles[0].node().get_children()):
@@ -286,7 +286,7 @@ class Tmx2Bam():
     def load_tsx(self, layer):
         tsx_filename = layer.get("source")
         tsx = ET.parse(os.path.join(self.dir, tsx_filename)).getroot()
-        # Load texture and store in tsx as well.
+        # Load texture and store in the element tree.
         img_filename = tsx[0].get("source")
         texture = Texture()
         texture.read(os.path.join(self.dir, img_filename))
@@ -295,7 +295,8 @@ class Tmx2Bam():
         texture.setMagfilter(SamplerState.FT_nearest)
         texture.setMinfilter(SamplerState.FT_nearest)
         tsx.set("texture", texture)
-        # Calculate tile size in uv's
+        # Calculate individual tile size in UV
+        # Store it in the element tree
         columns = int(tsx.get("columns"))
         rows = int(tsx.get("tilecount"))//columns
         uv_xscale = 1/columns
@@ -303,10 +304,8 @@ class Tmx2Bam():
         tsx.set("rows", str(rows))
         tsx.set("uv_xscale", str(uv_xscale))
         tsx.set("uv_yscale", str(uv_yscale))
-
         layer.set("tsx", tsx)
         self.tilesheets.append(layer)
-
 
     def export_bam(self, filename):
         print("Exporting as {}".format(filename))
