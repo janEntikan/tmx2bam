@@ -2,7 +2,8 @@ CLI tool for converting Tiled TMX files to Panda3D BAM files.
 
 Usage:
 ```
-$ python convert.py path/to/tmx/file.tmx path/to/bam/file.bam
+$ pip install panda3d-tmx2bam
+$ tmx2bam path/to/tmx/file.tmx path/to/bam/file.bam
 ```
 or
 ```
