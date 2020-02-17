@@ -2,8 +2,19 @@ CLI tool for converting Tiled TMX files to Panda3D BAM files.
 
 Usage:
 ```
-python convert.py path/to/tmx/file.tmx path/to/bam/file.bam
+$ python convert.py path/to/tmx/file.tmx path/to/bam/file.bam
 ```
+or
+```
+from tmx2bam import Tmx2Bam
+from direct.showbase.ShowBase import ShowBase
+
+base = ShowBase()
+tmx_map = Tmx2Bam("path/to/tmx/file.tmx")
+tmx_map.node.reparent_to(render)
+base.run()
+```
+
 load the bam with panda3d like you would normally. find() important tiles by their properties/tags and make them move about and all that. Orthographic camera recommended!
 
 Currently supports:

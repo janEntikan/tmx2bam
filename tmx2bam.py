@@ -13,8 +13,8 @@ from panda3d.core import LineSegs
 from panda3d.core import TextNode
 
 
-class Converter():
-    def __init__(self, input_file, output_file):
+class Tmx2Bam():
+    def __init__(self, input_file, output_file=None):
         self.dir = os.path.dirname(input_file)
         self.depth = 0
         # generators
@@ -25,15 +25,15 @@ class Converter():
         # storage
         self.tilesheets = []    # Every tsx file loaded.
         self.tiles = {}         # Every tile-card generated.
-        self.root_node = NodePath("tmx_root")
+        self.node = NodePath("tmx_root")
 
         self.tmx = ET.parse(input_file).getroot()
         self.xscale = int(self.tmx.get("tilewidth"))
         self.yscale = int(self.tmx.get("tileheight"))
 
         self.load_group(self.tmx)
-
-        self.export_bam(output_file)
+        if output_file:
+            self.export_bam(output_file)
 
     def attributes_to_tags(self, node, element):
         for key in element.keys():
@@ -183,7 +183,7 @@ class Converter():
         if dynamic_tiles.get_num_children() > 0:
             dynamic_tiles.reparent_to(layer_node)
         layer_node.set_z(self.depth)
-        layer_node.reparent_to(self.root_node)
+        layer_node.reparent_to(self.node)
 
     def flatten_animated_tiles(self, group_node):
         # FIXME: hard to read: get_child() everywhere
@@ -238,7 +238,7 @@ class Converter():
             self.attributes_to_tags(node, object)
             node.reparent_to(layer_node)
         layer_node.set_z(self.depth)
-        layer_node.reparent_to(self.root_node)
+        layer_node.reparent_to(self.node)
 
     def load_imagelayer(self, imagelayer):
         # FIXME: A lot of this stuff is repeated in build_tilcard
@@ -254,7 +254,7 @@ class Converter():
         texture.setMinfilter(SamplerState.FT_nearest)
         node.set_texture(texture)
         node.set_transparency(True)
-        node.reparent_to(self.root_node)
+        node.reparent_to(self.node)
         x = float(imagelayer.get("offsetx"))/self.xscale
         y = float(imagelayer.get("offsety"))/self.yscale
         node.set_pos((x, y, self.depth))
@@ -271,7 +271,7 @@ class Converter():
             elif layer.tag == "imagelayer":
                 self.load_imagelayer(layer)
             elif layer.tag == "group":
-                self.load_group(layer)
+               self.load_group(layer)
             self.depth -= 1
 
     def get_tileset(self, id):
@@ -310,7 +310,7 @@ class Converter():
 
     def export_bam(self, filename):
         print("Exporting as {}".format(filename))
-        self.root_node.writeBamFile("{}".format(filename))
+        self.node.writeBamFile("{}".format(filename))
 
 def main():
     parser = argparse.ArgumentParser(
@@ -325,7 +325,8 @@ def main():
     src = os.path.abspath(args.src)
     dst = os.path.abspath(args.dst)
 
-    Converter(src, dst)
+    tmx2bam = Tmx2Bam(src, dst)
+
 
 if __name__ == "__main__":
     main()
