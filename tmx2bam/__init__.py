@@ -14,10 +14,9 @@ from panda3d.core import TextNode
 
 
 class Tmx2Bam():
-    def __init__(self, input_file, output_file=None):
+    def __init__(self, input_file, output_file=None, prefabs={}):
         self.dir = os.path.dirname(input_file)
         self.depth = 0
-
         self.cardmaker = CardMaker("image")
         self.cardmaker.set_frame(0, 1, -1, 0)
         self.linesegs = LineSegs()
@@ -26,6 +25,8 @@ class Tmx2Bam():
         self.tilesheets = []    # Every tsx file loaded.
         self.tiles = {}         # Every unique tile/card.
         self.node = NodePath("tmx_root")
+
+        self.prefabs = prefabs
 
         self.tmx = ET.parse(input_file).getroot()
         self.xscale = int(self.tmx.get("tilewidth"))
@@ -68,6 +69,8 @@ class Tmx2Bam():
         return self.linesegs.create()
 
     def build_tilecard(self, tsx, id):
+        # TODO: Cross-reference with self.prefabs in case there's a shape
+        # to use instead of this card
         card = self.cardmaker.generate()
         card_node = NodePath(card)
         card_node.set_texture(tsx.get("texture"))
@@ -185,7 +188,7 @@ class Tmx2Bam():
 
     def flatten_animated_tiles(self, group_node):
         # FIXME: hard to read: get_child() everywhere
-        # Makes a new node for each frame taking all its tiles
+        # Makes a new node for each frame using all its tiles
         # flatten the s*** out of the node and add to a new SequenceNode.
         tiles =  group_node.get_children()
         flattened_sequence = SequenceNode(tiles[0].name)
@@ -213,8 +216,8 @@ class Tmx2Bam():
             if not name: name = "object"
             node = NodePath(name)
             if len(object) > 0:
-                # Has a type, it's a polygon, text, point or ellipse
-                # Points and ellipses stay empty for now.
+                # Has a type, so it's either a polygon, text, point or ellipse
+                # Points and ellipses are just an empty for now.
                 kind = object[0].tag
                 if kind == "polygon":
                     node.attach_new_node(self.build_polygon(object))
@@ -222,14 +225,14 @@ class Tmx2Bam():
                     node.attach_new_node(self.build_text(object))
                     node.set_p(90)
                 self.attributes_to_tags(node, object[0])
-            else: # Doesn't have a type, it's either an image or a rectangle
+            else: # Doesn't have a type, so it's either an image or a rectangle
                 node = NodePath(name)
                 w = float(object.get("width"))/self.xscale
                 h = float(object.get("height"))/self.yscale
-                if object.get("gid"): # Has a gid, it's an image
+                if object.get("gid"): # Has a gid, so it's an image
                     self.get_tile(int(object.get("gid"))).copy_to(node)
                     node.set_scale(w, h, 1)
-                else: # It's a rectangle
+                else: # It's none of the above, so it's a rectangle
                     node.attach_new_node(self.build_rectangle(w, h))
 
             x = float(object.get("x"))/self.xscale
