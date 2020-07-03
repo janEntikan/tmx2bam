@@ -27,28 +27,25 @@ Currently supports:
 * Object layer/Objects (point, poly, rectangle, text, image)
 * Background images
 * Merge animated sprites
+* Allow more shapes than just cards
 
 Left to do:
-* Fix wonky UV calculation
 * Infinite maps (chunks)
 * Hexagonal and Isometric tiles
 * Tile render order
 * Tilesheet image collection
 * Embedded tilesheet in tmx
-* Embed texture in bam
+* Embedding texture in bam
 * Tiled features I'm not aware of
 * Error handling
 * A better readme
 
 Mind:
-* The map is facing DOWN the Z
+* The map is facing DOWN the Z so X-0 and Y-0 is top left.
 * Animated sprites can only have one steady framerate that you can set on the first frame in Tiled.
 * Currently the image resolutions have to be power of two.
-* Tiles are merged into a single block of geometry as much as possible. Give tiles properties other then their ID to avoid this from happening.
+* Rendering individual tiles is slow. Add a custom property named "flatten" to layers to merge them.
 * The ellipse and point objects are not drawn, they're empty nodepaths.
-* It might be fun if some cards where cubes instead.
 * I'm not a programmer but I play one on TV. Your mileage may vary.
 
 Licensed WTFPL.
-
-tileset.png is https://opengameart.org/content/simple-broad-purpose-tileset

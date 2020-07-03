@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 
 import xml.etree.ElementTree as ET
@@ -11,14 +12,14 @@ from panda3d.core import SamplerState
 from panda3d.core import SequenceNode
 from panda3d.core import LineSegs
 from panda3d.core import TextNode
-
+from panda3d.core import Loader
 
 class Tmx2Bam():
-    def __init__(self, input_file, output_file=None, prefabs={}):
+    def __init__(self, input_file, output_file=None, prefabs=""):
         self.dir = os.path.dirname(input_file)
         self.depth = 0
         self.cardmaker = CardMaker("image")
-        self.cardmaker.set_frame(0, 1, -1, 0)
+        self.cardmaker.set_frame(-0.5, 0.5, -0.5, 0.5)
         self.linesegs = LineSegs()
         self.textnode = TextNode("text")
 
@@ -26,7 +27,13 @@ class Tmx2Bam():
         self.tiles = {}         # Every unique tile/card.
         self.node = NodePath("tmx_root")
 
-        self.prefabs = prefabs
+        # load prefab models
+        self.prefabs = {}
+        if prefabs:
+            loader = Loader.get_global_ptr()
+            for prefab_node in loader.load_sync(prefabs).get_children():
+                prefab_node.clear_transform()
+                self.prefabs[prefab_node.name] = NodePath(prefab_node)
 
         self.tmx = ET.parse(input_file).getroot()
         self.xscale = int(self.tmx.get("tilewidth"))
@@ -68,30 +75,33 @@ class Tmx2Bam():
         self.linesegs.draw_to(0, 0, 0)
         return self.linesegs.create()
 
-    def build_tilecard(self, tsx, id):
-        # TODO: Cross-reference with self.prefabs in case there's a shape
-        # to use instead of this card
-        card = self.cardmaker.generate()
-        card_node = NodePath(card)
-        card_node.set_texture(tsx.get("texture"))
-        card_node.set_transparency(True)
-        stage = card_node.find_all_texture_stages()[0]
-        # size of sheet in tiles
-        columns = int(tsx.get("columns")) # = 80
-        rows = int(tsx.get("rows")) # = 80
-        # size of a single tile in UV
-        w = float(tsx.get("uv_xscale"))
-        h = float(tsx.get("uv_yscale"))
-        # pos of tile in sheet in pixels
-        tile_x = int(id%columns)
-        tile_y = int(id/rows)
-        # pos of a single tile in UV
-        u = (tile_x*w)
-        v = 1-((tile_y*h)+h)
-        # set UVs
-        card_node.set_tex_scale(stage, w, h)
-        card_node.set_tex_offset(stage, (u, v))
-        return card_node
+    def build_tile(self, tsx, id):
+        # Cross-reference with self.prefabs in case there's a shape
+        use_prefab = False
+        for tile in tsx.findall("tile"):
+            if int(tile.get("id")) == id:
+                type = tile.get("type")
+                if type in self.prefabs:
+                    geometry_node = NodePath(str(id))
+                    self.prefabs[type].copy_to(geometry_node)
+                    use_prefab = True
+        # Else we generate a card
+        if not use_prefab:
+            geometry = self.cardmaker.generate()
+            geometry_node = NodePath(geometry)
+            geometry_node.set_texture(tsx.get("texture"), 1)
+        geometry_node.set_transparency(True)
+        # scale and offset UVs for single sprite
+        columns = int(tsx.get("columns"))
+        rows = int(tsx.get("rows"))
+        w, h = 1/columns, 1/rows
+        tile_x, tile_y = int(id%columns), int(id/rows)
+        u, v = (tile_x*w), 1-((tile_y*h)+h)
+        for stage in geometry_node.find_all_texture_stages():
+            geometry_node.set_texture(stage, tsx.get("texture"), 1)
+            geometry_node.set_tex_scale(stage, w, h)
+            geometry_node.set_tex_offset(stage, (u, v))
+        return geometry_node
 
     def animated_tile(self, tsx, tile):
         node = NodePath("animated tile")
@@ -103,7 +113,7 @@ class Tmx2Bam():
             sequence.set_frame_rate = 0
         for frame in tile[0]:
             tileid = int(frame.get("tileid"))
-            tile_node = self.build_tilecard(tsx, tileid)
+            tile_node = self.build_tile(tsx, tileid)
             sequence.add_child(tile_node.node())
         sequence.loop(True)
         node.attach_new_node(sequence)
@@ -116,37 +126,34 @@ class Tmx2Bam():
             node = self.tiles[map_id] # use that one
         else: # else build and store it
             is_special = False
+            node = self.build_tile(tsx, set_id)
             for element in tsx:
                 if element.tag == "tile":
                     if int(element.get("id")) == set_id:
                         # if it contains an element, it's always an animation
                         if len(element) > 0:
                             node = self.animated_tile(tsx, element)
-                            # if it has properties other then ID, don't flatten
-                            if len(element.keys()) > 1:
-                                node.set_tag("_flatten", "dynamic")
-                            else:
-                                node.set_tag("_flatten", "group")
-                        else:
-                            node.set_tag("_flatten", "dynamic")
-                            node = self.build_tilecard(tsx, set_id)
                         self.attributes_to_tags(node, element)
-                        is_special = True
                         break
-            if not is_special:
-                node = self.build_tilecard(tsx, set_id)
             self.tiles[map_id] = node
-        node.set_p(90)
+        node.set_p(90) #TODO: Get rid of this.
         return node
 
     def load_layer(self, layer):
         layer_node = NodePath(layer.get("name"))
-        static_tiles = NodePath("static")   # Static tiles without properties (flatten)
-        dynamic_tiles = NodePath("unique")  # Any tile with a property (don't flatten)
-        tile_groups = {}                    # Animated tiles without properties (flatten)
-
+        static_tiles = NodePath("static")    # Static tiles to flatten
+        flat_animated_tiles = NodePath("animated") # Animated tiles to flatten
+        dynamic_tiles = NodePath("dynamic")  # All tiles unless otherwise specified (don't flatten)
+        tile_groups = {}
+        # should we flatten this layer
+        flatten = False
+        properties = layer.find("properties")
+        if properties:
+            for property in properties:
+                if property.get("name") == "flatten":
+                    flatten = True
         # build all tiles in data as a grid of cards
-        data = layer[0].text
+        data = layer.find("data").text
         data = data.replace('\n', '')
         data = data.split(",")
         collumns = int(layer.get("width"))
@@ -155,34 +162,22 @@ class Tmx2Bam():
             for x in range(collumns):
                 id = int(data[(y*collumns) + (x%collumns)])
                 if id > 0:
-                    # make a copy
                     tile = NodePath("tile")
-                    card = self.get_tile(id)
-                    card.copy_to(tile)
-                    # Reparent to nodes for flattening.
-                    if card.get_tag("_flatten") == "group":
-                        if id in tile_groups:
-                            group_node = tile_groups[id]
+                    self.get_tile(id).copy_to(tile)
+                    if flatten:
+                        if tile.find("**/+SequenceNode"):
+                            tile.reparent_to(flat_animated_tiles)
                         else:
-                            group_node = NodePath("tile group")
-                            tile_groups[id] = group_node
-                        tile.reparent_to(group_node)
-                    elif card.get_tag("_flatten") == "dynamic":
+                            tile.reparent_to(static_tiles)
+                    else:
                         tile.reparent_to(dynamic_tiles)
-                    else: # it's static
-                        tile.reparent_to(static_tiles)
                     tile.set_pos(x, y, 0)
-
-        # flatten all static cards,
-        static_tiles.flattenStrong()
-        static_tiles.reparent_to(layer_node)
-        # flatten each tile-group seperately (if animated)
-        for group in tile_groups:
-            tile_groups[group] = self.flatten_animated_tiles(tile_groups[group])
-            tile_groups[group].reparent_to(layer_node)
-        # dynamic tiles each do their own thing, so we leave them alone
-        if dynamic_tiles.get_num_children() > 0:
-            dynamic_tiles.reparent_to(layer_node)
+        if static_tiles.get_num_children() > 0:
+            static_tiles.flatten_strong()
+        if flat_animated_tiles.get_num_children() > 0:
+            flat_animated_tiles = self.flatten_animated_tiles(flat_animated_tiles)
+        for t in (static_tiles, flat_animated_tiles, dynamic_tiles):
+            t.reparent_to(layer_node)
         layer_node.set_z(self.depth)
         layer_node.reparent_to(self.node)
 
@@ -234,7 +229,6 @@ class Tmx2Bam():
                     node.set_scale(w, h, 1)
                 else: # It's none of the above, so it's a rectangle
                     node.attach_new_node(self.build_rectangle(w, h))
-
             x = float(object.get("x"))/self.xscale
             y = float(object.get("y"))/self.yscale
             node.set_pos(x, y, 0)
@@ -258,8 +252,13 @@ class Tmx2Bam():
         node.set_texture(texture)
         node.set_transparency(True)
         node.reparent_to(self.node)
-        x = float(imagelayer.get("offsetx"))/self.xscale
-        y = float(imagelayer.get("offsety"))/self.yscale
+        ox = imagelayer.get("offsetx")
+        x, y = 0, 0
+        if ox:
+            x = float(ox)/self.xscale
+        oy = imagelayer.get("offsety")
+        if oy:
+            y = float(oy)/self.yscale
         node.set_pos((x, y, self.depth))
         node.set_p(90)
 
@@ -302,11 +301,7 @@ class Tmx2Bam():
         # Store it in the element tree
         columns = int(tsx.get("columns"))
         rows = int(tsx.get("tilecount"))//columns
-        uv_xscale = 1/columns
-        uv_yscale = 1/rows
         tsx.set("rows", str(rows))
-        tsx.set("uv_xscale", str(uv_xscale))
-        tsx.set("uv_yscale", str(uv_yscale))
         layer.set("tsx", tsx)
         self.tilesheets.append(layer)
 
@@ -318,16 +313,19 @@ def main():
     parser = argparse.ArgumentParser(
         description='CLI tool to convert Tiled TMX files to Panda3D BAM files'
     )
-
     parser.add_argument('src', type=str, help='source path to .tmx')
     parser.add_argument('dst', type=str, help='destination path to .bam')
-
+    parser.add_argument('--prefabs', type=str, default=None, help=
+            '.bam file whos node`s names correspond to a tsx`s tiles "type".'
+            'This node will be used instead of a generated card')
     args = parser.parse_args()
-
     src = os.path.abspath(args.src)
     dst = os.path.abspath(args.dst)
-
-    tmx2bam = Tmx2Bam(src, dst)
+    if args.prefabs:
+        prefabs = os.path.abspath(args.prefabs)
+    else:
+        prefabs = None
+    tmx2bam = Tmx2Bam(src, dst, prefabs)
 
 
 if __name__ == "__main__":
