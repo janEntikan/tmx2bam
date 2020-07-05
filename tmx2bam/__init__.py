@@ -32,7 +32,7 @@ class Tmx2Bam():
         if prefabs:
             loader = Loader.get_global_ptr()
             for prefab_node in loader.load_sync(prefabs).get_children():
-                prefab_node.clear_transform()
+                prefab_node.clear_transform
                 self.prefabs[prefab_node.name] = NodePath(prefab_node)
 
         self.tmx = ET.parse(input_file).getroot()
@@ -85,11 +85,13 @@ class Tmx2Bam():
                     geometry_node = NodePath(str(id))
                     self.prefabs[type].copy_to(geometry_node)
                     use_prefab = True
+                    geometry_node.set_p(180)
         # Else we generate a card
         if not use_prefab:
             geometry = self.cardmaker.generate()
             geometry_node = NodePath(geometry)
             geometry_node.set_texture(tsx.get("texture"), 1)
+            geometry_node.set_p(90)
         geometry_node.set_transparency(True)
         # scale and offset UVs for single sprite
         columns = int(tsx.get("columns"))
@@ -136,7 +138,6 @@ class Tmx2Bam():
                         self.attributes_to_tags(node, element)
                         break
             self.tiles[map_id] = node
-        node.set_p(90) #TODO: Get rid of this.
         return node
 
     def load_layer(self, layer):
@@ -193,7 +194,6 @@ class Tmx2Bam():
                 for tile in tiles:
                     new_np = NodePath("frame")
                     new_np.set_pos(tile.get_pos())
-                    new_np.set_p(90)
                     animation = tile.node().get_child(a).get_child(0)
                     new_np.attach_new_node(animation.get_child(f))
                     new_np.reparent_to(combined_frame)

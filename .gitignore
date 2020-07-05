@@ -66,3 +66,7 @@ target/
 
 # Virtual Environment
 venv
+
+# Blender
+*.blend1
+*.blend1*
