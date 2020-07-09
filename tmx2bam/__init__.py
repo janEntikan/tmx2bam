@@ -14,6 +14,14 @@ from panda3d.core import LineSegs
 from panda3d.core import TextNode
 from panda3d.core import Loader
 
+
+def clear_all_tags(nodepath):
+    for key in nodepath.get_tag_keys():
+        nodepath.clear_tag(key)
+    for child in nodepath.get_children():
+        clear_all_tags(child)
+
+
 class Tmx2Bam():
     def __init__(self, input_file, output_file=None, prefabs=""):
         self.dir = os.path.dirname(input_file)
@@ -44,8 +52,11 @@ class Tmx2Bam():
             self.export_bam(output_file)
 
     def attributes_to_tags(self, node, element):
-        for key in element.keys():
-            node.set_tag(key, element.get(key))
+        if not element == None:
+            for property in element:
+                node.set_tag(property.get("name"), property.get("value"))
+            for key in element.keys():
+                node.set_tag(key, element.get(key))
 
     def build_text(self, object):
         self.textnode.set_text(object[0].text)
@@ -76,6 +87,7 @@ class Tmx2Bam():
         return self.linesegs.create()
 
     def build_tile(self, tsx, id):
+        tile = None
         # Cross-reference with self.prefabs in case there's a shape
         use_prefab = False
         for tile in tsx.findall("tile"):
@@ -85,7 +97,7 @@ class Tmx2Bam():
                     geometry_node = NodePath(str(id))
                     self.prefabs[type].copy_to(geometry_node)
                     use_prefab = True
-                    #geometry_node.set_p(180)
+                break
         # Else we generate a card
         if not use_prefab:
             geometry = self.cardmaker.generate()
@@ -103,6 +115,9 @@ class Tmx2Bam():
             geometry_node.set_texture(stage, tsx.get("texture"), 1)
             geometry_node.set_tex_scale(stage, w, h)
             geometry_node.set_tex_offset(stage, (u, v))
+        self.attributes_to_tags(geometry_node, tile)
+        #geometry_node.set_tag("type", tile.get("type"))
+
         return geometry_node
 
     def animated_tile(self, tsx, tile):
@@ -175,19 +190,17 @@ class Tmx2Bam():
                         tile.reparent_to(dynamic_tiles)
                     tile.set_pos(x, -y, 0)
         if static_tiles.get_num_children() > 0:
+            clear_all_tags(static_tiles)
             static_tiles.flatten_strong()
         if flat_animated_tiles.get_num_children() > 0:
+            clear_all_tags(flat_animated_tiles)
             flat_animated_tiles = self.flatten_animated_tiles(flat_animated_tiles)
         for t in (static_tiles, flat_animated_tiles, dynamic_tiles):
             t.reparent_to(layer_node)
         layer_node.set_z(self.depth)
         layer_node.reparent_to(self.node)
+        self.attributes_to_tags(layer_node, properties)
         self.depth += 1
-
-
-        self.prefabs["cube"].reparent_to(self.node)
-        self.prefabs["cube"].set_pos(2,2,0)
-
 
     def flatten_animated_tiles(self, group_node):
         # FIXME: hard to read: get_child() everywhere
