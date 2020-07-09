@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="panda3d-tmx2bam",
-    version="0.0.25",
+    version="0.0.251",
     author="janEntikan",
     author_email="bandaibandai@rocketship.com",
     description="CLI tool for converting Tiled TMX files to Panda3D BAM files.",

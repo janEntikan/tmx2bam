@@ -174,7 +174,6 @@ class Tmx2Bam():
                     else:
                         tile.reparent_to(dynamic_tiles)
                     tile.set_pos(x, -y, 0)
-                    print(tile.get_pos())
         if static_tiles.get_num_children() > 0:
             static_tiles.flatten_strong()
         if flat_animated_tiles.get_num_children() > 0:
