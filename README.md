@@ -41,8 +41,8 @@ Left to do:
 * A better readme
 
 Mind:
-* The map is facing DOWN the Z so X-0 and Y-0 is top left.
-* Animated sprites can only have one steady framerate that you can set on the first frame in Tiled.
+* The Y axis is inverted in panda3d.
+* Animated sprites can only have one steady frame-rate that you can set on the first frame in Tiled.
 * Currently the image resolutions have to be power of two.
 * Rendering individual tiles is slow. Add a custom property named "flatten" to layers to merge them.
 * The ellipse and point objects are not drawn, they're empty nodepaths.

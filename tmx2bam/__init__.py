@@ -32,7 +32,7 @@ class Tmx2Bam():
         if prefabs:
             loader = Loader.get_global_ptr()
             for prefab_node in loader.load_sync(prefabs).get_children():
-                prefab_node.clear_transform
+                prefab_node.clear_transform()
                 self.prefabs[prefab_node.name] = NodePath(prefab_node)
 
         self.tmx = ET.parse(input_file).getroot()
@@ -59,19 +59,19 @@ class Tmx2Bam():
         points = [tuple(map(float, i.split(","))) for i in points]
         startx = points[0][0]/self.xscale
         starty = points[0][1]/self.yscale
-        self.linesegs.move_to(startx, starty, 0)
+        self.linesegs.move_to(startx, -starty, 0)
         for point in points:
             x, y = point[0]/self.xscale, point[1]/self.yscale
-            self.linesegs.draw_to(x, y, 0)
-        self.linesegs.draw_to(startx, starty, 0)
+            self.linesegs.draw_to(x, -y, 0)
+        self.linesegs.draw_to(startx, -starty, 0)
         return self.linesegs.create()
 
     def build_rectangle(self, w, h):
         self.linesegs.reset()
         self.linesegs.move_to(0, 0, 0)
         self.linesegs.draw_to(w, 0, 0)
-        self.linesegs.draw_to(w, h, 0)
-        self.linesegs.draw_to(0, h, 0)
+        self.linesegs.draw_to(w, -h, 0)
+        self.linesegs.draw_to(0, -h, 0)
         self.linesegs.draw_to(0, 0, 0)
         return self.linesegs.create()
 
@@ -85,13 +85,13 @@ class Tmx2Bam():
                     geometry_node = NodePath(str(id))
                     self.prefabs[type].copy_to(geometry_node)
                     use_prefab = True
-                    geometry_node.set_p(180)
+                    #geometry_node.set_p(180)
         # Else we generate a card
         if not use_prefab:
             geometry = self.cardmaker.generate()
             geometry_node = NodePath(geometry)
             geometry_node.set_texture(tsx.get("texture"), 1)
-            geometry_node.set_p(90)
+            geometry_node.set_p(-90)
         geometry_node.set_transparency(True)
         # scale and offset UVs for single sprite
         columns = int(tsx.get("columns"))
@@ -109,10 +109,11 @@ class Tmx2Bam():
         node = NodePath("animated tile")
         sequence = SequenceNode("animated tile")
         duration = int(tile[0][0].get("duration"))
-        if duration > 0:
-            sequence.set_frame_rate(1000/duration)
+        if duration >= 9000:
+            sequence.set_frame_rate(0)
         else:
-            sequence.set_frame_rate = 0
+            sequence.set_frame_rate(1000/duration)
+
         for frame in tile[0]:
             tileid = int(frame.get("tileid"))
             tile_node = self.build_tile(tsx, tileid)
@@ -172,7 +173,8 @@ class Tmx2Bam():
                             tile.reparent_to(static_tiles)
                     else:
                         tile.reparent_to(dynamic_tiles)
-                    tile.set_pos(x, y, 0)
+                    tile.set_pos(x, -y, 0)
+                    print(tile.get_pos())
         if static_tiles.get_num_children() > 0:
             static_tiles.flatten_strong()
         if flat_animated_tiles.get_num_children() > 0:
@@ -181,6 +183,12 @@ class Tmx2Bam():
             t.reparent_to(layer_node)
         layer_node.set_z(self.depth)
         layer_node.reparent_to(self.node)
+        self.depth += 1
+
+
+        self.prefabs["cube"].reparent_to(self.node)
+        self.prefabs["cube"].set_pos(2,2,0)
+
 
     def flatten_animated_tiles(self, group_node):
         # FIXME: hard to read: get_child() everywhere
@@ -218,7 +226,7 @@ class Tmx2Bam():
                     node.attach_new_node(self.build_polygon(object))
                 elif kind == "text":
                     node.attach_new_node(self.build_text(object))
-                    node.set_p(90)
+                    node.set_p(-90)
                 self.attributes_to_tags(node, object[0])
             else: # Doesn't have a type, so it's either an image or a rectangle
                 node = NodePath(name)
@@ -231,7 +239,7 @@ class Tmx2Bam():
                     node.attach_new_node(self.build_rectangle(w, h))
             x = float(object.get("x"))/self.xscale
             y = float(object.get("y"))/self.yscale
-            node.set_pos(x, y, 0)
+            node.set_pos(x, -y, 0)
             self.attributes_to_tags(node, object)
             node.reparent_to(layer_node)
         layer_node.set_z(self.depth)
@@ -259,8 +267,8 @@ class Tmx2Bam():
         oy = imagelayer.get("offsety")
         if oy:
             y = float(oy)/self.yscale
-        node.set_pos((x, y, self.depth))
-        node.set_p(90)
+        node.set_pos((x, -y, self.depth))
+        node.set_p(-90)
 
     def load_group(self, group):
         for layer in group:
@@ -274,7 +282,6 @@ class Tmx2Bam():
                 self.load_imagelayer(layer)
             elif layer.tag == "group":
                self.load_group(layer)
-            self.depth -= 1
 
     def get_tileset(self, id):
         for tilesheet in self.tilesheets:
@@ -291,14 +298,12 @@ class Tmx2Bam():
         # Load texture and store in the element tree.
         img_filename = tsx[0].get("source")
         texture = Texture()
-        texture.read(os.path.join(self.dir, img_filename))
-        # texture.setWrapU(Texture.WM_clamp)
-        # texture.setWrapV(Texture.WM_clamp)
+        dir =  os.path.join(self.dir, tsx_filename)
+        place = os.path.join(os.path.split(dir)[0], img_filename)
+        texture.read(place)
         texture.setMagfilter(SamplerState.FT_nearest)
         texture.setMinfilter(SamplerState.FT_nearest)
         tsx.set("texture", texture)
-        # Calculate individual tile size in UV
-        # Store it in the element tree
         columns = int(tsx.get("columns"))
         rows = int(tsx.get("tilecount"))//columns
         tsx.set("rows", str(rows))

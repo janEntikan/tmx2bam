@@ -6,7 +6,7 @@
  <tile id="2" type="cube">
   <animation>
    <frame tileid="2" duration="9999"/>
-   <frame tileid="1" duration="9999"/>
+   <frame tileid="1" duration="1"/>
   </animation>
  </tile>
  <tile id="3" type="cube"/>
