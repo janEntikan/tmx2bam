@@ -89,6 +89,7 @@ class Tmx2Bam():
     def build_tile(self, tsx, id):
         tile = None
         # Cross-reference with self.prefabs in case there's a shape
+        # corresponding with a tile's type
         use_prefab = False
         for tile in tsx.findall("tile"):
             if int(tile.get("id")) == id:
@@ -163,12 +164,14 @@ class Tmx2Bam():
         dynamic_tiles = NodePath("dynamic")  # All tiles unless otherwise specified (don't flatten)
         tile_groups = {}
         # should we flatten this layer
-        flatten = False
+        store_data = flatten = False
         properties = layer.find("properties")
         if properties:
             for property in properties:
                 if property.get("name") == "flatten":
                     flatten = True
+                if property.get("name") == "store_data":
+                    store_data = True
         # build all tiles in data as a grid of cards
         data = layer.find("data").text
         data = data.replace('\n', '')
@@ -178,6 +181,7 @@ class Tmx2Bam():
         for y in range(rows):
             for x in range(collumns):
                 id = int(data[(y*collumns) + (x%collumns)])
+                data[(y*collumns) + (x%collumns)] = id
                 if id > 0:
                     tile = NodePath("tile")
                     self.get_tile(id).copy_to(tile)
@@ -197,10 +201,9 @@ class Tmx2Bam():
             flat_animated_tiles = self.flatten_animated_tiles(flat_animated_tiles)
         for t in (static_tiles, flat_animated_tiles, dynamic_tiles):
             t.reparent_to(layer_node)
-        layer_node.set_z(self.depth)
-        layer_node.reparent_to(self.node)
-        self.attributes_to_tags(layer_node, properties)
-        self.depth += 1
+        if store_data:
+            layer_node.set_python_tag("data", data)
+        self.append_layer(layer_node, properties)
 
     def flatten_animated_tiles(self, group_node):
         # FIXME: hard to read: get_child() everywhere
@@ -249,13 +252,15 @@ class Tmx2Bam():
                     node.set_scale(w, h, 1)
                 else: # It's none of the above, so it's a rectangle
                     node.attach_new_node(self.build_rectangle(w, h))
-            x = float(object.get("x"))/self.xscale
-            y = float(object.get("y"))/self.yscale
+            x = y = 0
+            if object.get("x"):
+                x = float(object.get("x"))/self.xscale
+            if object.get("y"):
+                y = float(object.get("y"))/self.yscale
             node.set_pos(x, -y, 0)
             self.attributes_to_tags(node, object)
             node.reparent_to(layer_node)
-        layer_node.set_z(self.depth)
-        layer_node.reparent_to(self.node)
+        self.append_layer(layer_node, objectgroup.find("properties"))
 
     def load_imagelayer(self, imagelayer):
         # FIXME: A lot of this stuff is repeated in build_tilcard
@@ -294,6 +299,18 @@ class Tmx2Bam():
                 self.load_imagelayer(layer)
             elif layer.tag == "group":
                self.load_group(layer)
+
+    def append_layer(self, node, properties):
+        self.attributes_to_tags(node, properties)
+        node.set_z(self.depth)
+        self.depth += 1
+        if properties:
+            for property in properties:
+                if property.get("name") == "z":
+                    node.set_z(int(property.get("value")))
+                    self.depth -= 1
+                    break
+        node.reparent_to(self.node)
 
     def get_tileset(self, id):
         for tilesheet in self.tilesheets:
