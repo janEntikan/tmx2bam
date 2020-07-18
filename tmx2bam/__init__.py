@@ -46,6 +46,7 @@ class Tmx2Bam():
         self.tmx = ET.parse(input_file).getroot()
         self.xscale = int(self.tmx.get("tilewidth"))
         self.yscale = int(self.tmx.get("tileheight"))
+        self.size = [0, 0]
 
         self.load_group(self.tmx)
         if output_file:
@@ -54,7 +55,8 @@ class Tmx2Bam():
     def attributes_to_tags(self, node, element):
         if not element == None:
             for property in element:
-                node.set_tag(property.get("name"), property.get("value"))
+                if property.get("name") and  property.get("value"):
+                    node.set_tag(property.get("name"), property.get("value"))
             for key in element.keys():
                 node.set_tag(key, element.get(key))
 
@@ -178,6 +180,7 @@ class Tmx2Bam():
         data = data.split(",")
         collumns = int(layer.get("width"))
         rows = int(layer.get("height"))
+        self.size = [collumns, rows]
         for y in range(rows):
             for x in range(collumns):
                 id = int(data[(y*collumns) + (x%collumns)])
