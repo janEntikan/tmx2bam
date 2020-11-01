@@ -112,15 +112,13 @@ class Tmx2Bam():
         columns = int(tsx.get("columns"))
         rows = int(tsx.get("rows"))
         w, h = 1/columns, 1/rows
-        tile_x, tile_y = int(id%columns), int(id/rows)
+        tile_x, tile_y = int(id%columns), int(id/(columns))
         u, v = (tile_x*w), 1-((tile_y*h)+h)
         for stage in geometry_node.find_all_texture_stages():
             geometry_node.set_texture(stage, tsx.get("texture"), 1)
             geometry_node.set_tex_scale(stage, w, h)
             geometry_node.set_tex_offset(stage, (u, v))
         self.attributes_to_tags(geometry_node, tile)
-        #geometry_node.set_tag("type", tile.get("type"))
-
         return geometry_node
 
     def animated_tile(self, tsx, tile):
@@ -131,7 +129,6 @@ class Tmx2Bam():
             sequence.set_frame_rate(0)
         else:
             sequence.set_frame_rate(1000/duration)
-
         for frame in tile[0]:
             tileid = int(frame.get("tileid"))
             tile_node = self.build_tile(tsx, tileid)
@@ -194,16 +191,19 @@ class Tmx2Bam():
                         else:
                             tile.reparent_to(static_tiles)
                     else:
-                        tile.reparent_to(dynamic_tiles)
+                        tile.reparent_to(layer_node)
                     tile.set_pos(x, -y, 0)
-        if static_tiles.get_num_children() > 0:
-            clear_all_tags(static_tiles)
-            static_tiles.flatten_strong()
-        if flat_animated_tiles.get_num_children() > 0:
-            clear_all_tags(flat_animated_tiles)
-            flat_animated_tiles = self.flatten_animated_tiles(flat_animated_tiles)
-        for t in (static_tiles, flat_animated_tiles, dynamic_tiles):
-            t.reparent_to(layer_node)
+
+        if flatten:
+            if static_tiles.get_num_children() > 0:
+                clear_all_tags(static_tiles)
+                static_tiles.flatten_strong()
+            if flat_animated_tiles.get_num_children() > 0:
+                clear_all_tags(flat_animated_tiles)
+                flat_animated_tiles = self.flatten_animated_tiles(flat_animated_tiles)
+            for t in (static_tiles, flat_animated_tiles):
+                t.reparent_to(layer_node)
+
         if store_data:
             layer_node.set_python_tag("data", data)
         self.append_layer(layer_node, properties)
